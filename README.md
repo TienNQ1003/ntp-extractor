@@ -33,3 +33,7 @@ In the file ntp-extractor_test.py, please fix the url with RTSP link and make su
 ```
 python3 ntp-extractor_test.py
 ```
+
+## References:
+1. mv-extractor: https://github.com/LukasBommes/mv-extractor 
+2. opencv: https://github.com/opencv/opencv
