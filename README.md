@@ -23,7 +23,7 @@ sudo docker build -t ntp_extractor .
 ```
 Run the container with the newly built images:
 ```
-docker run -it ntp-extractor:latest /bin/bash
+sudo docker run -it ntp_extractor:latest /bin/bash
 ```
 
 
