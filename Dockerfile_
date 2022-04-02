@@ -1,0 +1,81 @@
+ARG TRT_IMAGE_VERSION=20.09
+FROM nvcr.io/nvidia/tensorrt:${TRT_IMAGE_VERSION}-py3
+
+ARG TRT_IMAGE_VERSION
+ARG OPENCV_VERSION=4.1.1
+# ARG APP_DIR=/home
+ARG SCRIPT_DIR=/opt/tensorrt/python
+ARG DEBIAN_FRONTEND=noninteractive
+# DucNM57 ADD
+ENV HOME "/home"
+# ENV TZ=America/Los_Angeles
+
+ENV OPENBLAS_MAIN_FREE=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV NO_AT_BRIDGE=1
+
+# Install OpenCV and FastMOT dependencies
+RUN apt-get -y update && \
+    apt-get install -y git && \
+    apt-get install -y --no-install-recommends \
+    wget unzip tzdata \
+    build-essential cmake pkg-config \
+    libgtk-3-dev libcanberra-gtk3-module \
+    libjpeg-dev libpng-dev libtiff-dev \
+    libavcodec-dev libavformat-dev libswscale-dev \
+    libmp3lame-dev zlib1g-dev libvorbis-dev libopus-dev libdc1394-22-dev liblzma-dev \
+    libv4l-dev libxvidcore-dev libx264-dev libsdl2-dev  libvpx-dev libvdpau-dev\
+    gfortran libatlas-base-dev \
+    gstreamer1.0-tools \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-libav \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    libtbb2 libtbb-dev libdc1394-22-dev && \
+    pip install -U --no-cache-dir setuptools pip && \
+    pip install --no-cache-dir numpy==1.18.0 && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get autoremove
+
+COPY mv-extractor/nv-codec-headers $HOME/nv_codec/nv-codec-headers
+WORKDIR $HOME/nv_codec/nv-codec-headers
+RUN make && \
+    make install
+# Build OpenCV -MV
+WORKDIR $HOME/video_cap
+COPY mv-extractor /home/video_cap
+
+RUN mkdir -p /home/video_cap && \
+  cd /home/video_cap && \
+  chmod +x install.sh && \
+  ./install.sh
+
+
+ENV PATH="$PATH:/home/bin"
+ENV PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/home/ffmpeg_build/lib/pkgconfig"
+ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/home/opencv/build/lib"
+
+RUN cd $HOME/video_cap && \
+  python3 setup.py install
+
+# Install Python dependencies
+WORKDIR $HOME/FastMOT
+COPY requirements.txt .
+
+
+# Specify your GPU compute with --build-arg for CuPy (e.g. "arch=compute_75,code=sm_75")
+ARG CUPY_NVCC_GENERATE_CODE
+
+# TensorFlow is not supported in 21.05
+RUN if [[ -z ${CUPY_NVCC_GENERATE_CODE} ]]; then \
+        echo "CUPY_NVCC_GENERATE_CODE not set, building CuPy for all architectures (slower)"; \
+    fi && \
+    pip install --no-cache-dir cython && \
+    if [[ ${TRT_IMAGE_VERSION} == 21.05 ]]; then \
+        CUPY_NUM_BUILD_JOBS=$(nproc) pip install --no-cache-dir -r <(grep -ivE "tensorflow" requirements.txt); \
+    else \
+        dpkg -i ${SCRIPT_DIR}/*-tf_*.deb && \
+        CUPY_NUM_BUILD_JOBS=$(nproc) pip install --no-cache-dir -r requirements.txt; \
+    fi
